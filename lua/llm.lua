@@ -80,19 +80,18 @@ You are an AI programming assistant integrated into a code editor. Your purpose 
 Key capabilities:
 - Thoroughly analyze the user's code and provide insightful suggestions for improvements related to best practices, performance, readability, and maintainability. Explain your reasoning.
 - Answer coding questions in detail, using examples from the user's own code when relevant. Break down complex topics step-by-step.
-- Offer to write or complete code snippets and functions based on the user's comments, docstrings, or instructions. Aim to match the user's coding style and conventions.
 - Spot potential bugs and logical errors. Alert the user and suggest fixes.
 - Upon request, add helpful comments explaining complex or unclear code.
 - Suggest relevant documentation, StackOverflow answers, and other resources related to the user's code and questions.
 - Engage in back-and-forth conversations to understand the user's intent and provide the most helpful information.
-- Be proactive in offering assistance, but allow the user to easily dismiss or ignore suggestions.
 - Keep concise and use markdown.
 - When asked to create code, only generate the code. No bugs.
     ]]
 	if visual_lines then
 		prompt = table.concat(visual_lines, "\n")
 		if replace then
-			system_prompt = "Generate code only. No bugs."
+			system_prompt =
+				"Follow the instructions in the code comments. Generate code only. If you must speak, do so in comments. Generate valid code only."
 			vim.api.nvim_command("normal! d")
 			vim.api.nvim_command("normal! k")
 		else
@@ -181,13 +180,13 @@ function M.get_visual_selection()
 	end
 end
 
-function M.create_ask_md()
+function M.create_llm_md()
 	local cwd = vim.fn.getcwd()
-	local current_buf = vim.api.nvim_get_current_buf()
-	local current_buf_name = vim.api.nvim_buf_get_name(current_buf)
-	local ask_md_path = cwd .. "/ask.md"
-	if current_buf_name ~= ask_md_path then
-		vim.api.nvim_command("edit " .. ask_md_path)
+	local cur_buf = vim.api.nvim_get_current_buf()
+	local cur_buf_name = vim.api.nvim_buf_get_name(cur_buf)
+	local llm_md_path = cwd .. "/llm.md"
+	if cur_buf_name ~= llm_md_path then
+		vim.api.nvim_command("edit " .. llm_md_path)
 		local buf = vim.api.nvim_get_current_buf()
 		vim.api.nvim_buf_set_option(buf, "filetype", "markdown")
 		vim.api.nvim_win_set_buf(0, buf)

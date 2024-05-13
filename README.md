@@ -24,13 +24,13 @@ lazy.nvim
 
 Triggers the LLM assistant. You can pass an optional `replace` flag to replace the current selection with the LLM's response. The prompt is either the visually selected text or the file content up to the cursor if no selection is made.
 
-**`create_ask_md()`**
+**`create_llm_md()`**
 
-Creates a new `ask.md` file in the current working directory, where you can write questions or prompts for the LLM.
+Creates a new `llm.md` file in the current working directory, where you can write questions or prompts for the LLM.
 
 **Example Bindings**
 ```lua
-vim.keymap.set("n", "<leader>m", function() require("llm").create_ask_md() end)
+vim.keymap.set("n", "<leader>m", function() require("llm").create_llm_md() end)
 vim.keymap.set("n", "<leader>,", function() require("llm").prompt({ replace = false }) end)
 vim.keymap.set("v", "<leader>,", function() require("llm").prompt({ replace = false }) end)
 vim.keymap.set("v", "<leader>.", function() require("llm").prompt({ replace = true }) end)
