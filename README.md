@@ -8,7 +8,7 @@ https://github.com/melbaldove/llm.nvim/assets18225174/9bdc2fa1-ade4-48f2-87ce-30
 
 ### Installation
 
-Before using the plugin, set the `GROQ_API_KEY` environment variable with your Groq API key.
+Before using the plugin, set the `GROQ_API_KEY` and/or the `OPENAI_API_KEY` env vars with your api keys.
 
 lazy.nvim
 ```lua
@@ -31,9 +31,16 @@ Creates a new `llm.md` file in the current working directory, where you can writ
 **Example Bindings**
 ```lua
 vim.keymap.set("n", "<leader>m", function() require("llm").create_llm_md() end)
-vim.keymap.set("n", "<leader>,", function() require("llm").prompt({ replace = false }) end)
-vim.keymap.set("v", "<leader>,", function() require("llm").prompt({ replace = false }) end)
-vim.keymap.set("v", "<leader>.", function() require("llm").prompt({ replace = true }) end)
+
+-- keybinds for prompting with groq
+vim.keymap.set("n", "<leader>,", function() require("llm").prompt({ replace = false, service = "groq" }) end)
+vim.keymap.set("v", "<leader>,", function() require("llm").prompt({ replace = false, service = "groq" }) end)
+vim.keymap.set("v", "<leader>.", function() require("llm").prompt({ replace = true, service = "groq" }) end)
+
+-- keybinds for prompting with openai
+vim.keymap.set("n", "<leader>g,", function() require("llm").prompt({ replace = false, service = "openai" }) end)
+vim.keymap.set("v", "<leader>g,", function() require("llm").prompt({ replace = false, service = "openai" }) end)
+vim.keymap.set("v", "<leader>g.", function() require("llm").prompt({ replace = true, service = "openai" }) end)
 ```
 
 ### Roadmap

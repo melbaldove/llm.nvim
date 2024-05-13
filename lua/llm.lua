@@ -1,10 +1,11 @@
 local nio = require("nio")
 local M = {}
 
-local url = "https://api.groq.com/openai/v1/chat/completions"
+local groq_url = "https://api.groq.com/openai/v1/chat/completions"
+local openai_url = "https://api.openai.com/v1/chat/completions"
 
-local function get_groq_api_key()
-	return os.getenv("GROQ_API_KEY")
+local function get_api_key(name)
+	return os.getenv(name)
 end
 
 function M.get_lines_until_cursor()
@@ -73,6 +74,7 @@ end
 
 function M.prompt(opts)
 	local replace = opts.replace
+	local service = opts.service
 	local prompt = ""
 	local visual_lines = M.get_visual_selection()
 	local system_prompt = [[
@@ -100,6 +102,22 @@ Key capabilities:
 	else
 		prompt = M.get_lines_until_cursor()
 	end
+
+	local url = ""
+	local model = ""
+	local api_key_name = ""
+	if service == "groq" then
+		url = groq_url
+		api_key_name = "GROQ_API_KEY"
+		model = "llama3-70b-8192"
+	else
+		url = openai_url
+		api_key_name = "OPENAI_API_KEY"
+		model = "gpt-4-turbo"
+	end
+
+	local api_key = get_api_key(api_key_name)
+
 	local data = {
 		messages = {
 			{
@@ -111,13 +129,11 @@ Key capabilities:
 				content = prompt,
 			},
 		},
-		model = "llama3-70b-8192",
+		model = model,
 		temperature = 0.7,
 		stream = true,
 		max_tokens = 1024,
 	}
-
-	local api_key = get_groq_api_key()
 
 	local response = nio.process.run({
 		cmd = "curl",
