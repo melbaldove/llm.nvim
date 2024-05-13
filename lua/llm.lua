@@ -37,7 +37,6 @@ local function process_sse_response(response)
 	vim.api.nvim_command("normal! o")
 	while true do
 		local chunk = response.stdout.read(1024)
-		print(chunk)
 		if chunk == nil then
 			break
 		end
