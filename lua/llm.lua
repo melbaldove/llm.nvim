@@ -112,7 +112,7 @@ Key capabilities:
 	else
 		url = openai_url
 		api_key_name = "OPENAI_API_KEY"
-		model = "gpt-4-turbo"
+		model = "gpt-4o"
 	end
 
 	local api_key = get_api_key(api_key_name)
