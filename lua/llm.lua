@@ -3,6 +3,7 @@ local M = {}
 
 local groq_url = "https://api.groq.com/openai/v1/chat/completions"
 local openai_url = "https://api.openai.com/v1/chat/completions"
+local timeout_ms = 10000
 
 local function get_api_key(name)
 	return os.getenv(name)
@@ -34,8 +35,22 @@ end
 
 local function process_sse_response(response)
 	local buffer = ""
-	vim.api.nvim_command("normal! o")
+	local has_tokens = false
+	local start_time = vim.uv.hrtime()
+
+	nio.run(function()
+		nio.sleep(timeout_ms)
+		response.stdout.close()
+		if not has_tokens then
+			print("llm.nvim has timed out!")
+		end
+	end)
 	while true do
+		local current_time = vim.uv.hrtime()
+		local elapsed = (current_time - start_time)
+		if elapsed >= timeout_ms * 1000000 then
+			return
+		end
 		local chunk = response.stdout.read(1024)
 		if chunk == nil then
 			break
@@ -62,6 +77,7 @@ local function process_sse_response(response)
 						local data = vim.fn.json_decode(json_str)
 						local content = data.choices[1].delta.content
 						if data.choices and content then
+							has_tokens = true
 							write_string_at_cursor(content)
 						end
 					end)
@@ -150,6 +166,7 @@ Key capabilities:
 		},
 	})
 	nio.run(function()
+		nio.api.nvim_command("normal! o")
 		process_sse_response(response)
 	end)
 end
