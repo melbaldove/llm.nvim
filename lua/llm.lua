@@ -40,15 +40,15 @@ local function process_sse_response(response)
 
 	nio.run(function()
 		nio.sleep(timeout_ms)
-		response.stdout.close()
 		if not has_tokens then
+			response.stdout.close()
 			print("llm.nvim has timed out!")
 		end
 	end)
 	while true do
 		local current_time = vim.uv.hrtime()
 		local elapsed = (current_time - start_time)
-		if elapsed >= timeout_ms * 1000000 then
+		if elapsed >= timeout_ms * 1000000 and not has_tokens then
 			return
 		end
 		local chunk = response.stdout.read(1024)
@@ -147,7 +147,6 @@ Key capabilities:
 		model = model,
 		temperature = 0.7,
 		stream = true,
-		max_tokens = 1024,
 	}
 
 	local response = nio.process.run({
