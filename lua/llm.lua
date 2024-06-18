@@ -103,12 +103,13 @@ Key capabilities:
 - Engage in back-and-forth conversations to understand the user's intent and provide the most helpful information.
 - Keep concise and use markdown.
 - When asked to create code, only generate the code. No bugs.
+- Think step by step
     ]]
 	if visual_lines then
 		prompt = table.concat(visual_lines, "\n")
 		if replace then
 			system_prompt =
-				"Follow the instructions in the code comments. Generate code only. If you must speak, do so in comments. Generate valid code only."
+				"Follow the instructions in the code comments. Generate code only. Think step by step. If you must speak, do so in comments. Generate valid code only."
 			vim.api.nvim_command("normal! d")
 			vim.api.nvim_command("normal! k")
 		else
