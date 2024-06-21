@@ -8,7 +8,7 @@ https://github.com/melbaldove/llm.nvim/assets18225174/9bdc2fa1-ade4-48f2-87ce-30
 
 ### Installation
 
-Before using the plugin, set the `GROQ_API_KEY` and/or the `OPENAI_API_KEY` env vars with your api keys.
+Before using the plugin, set any of `GROQ_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` env vars with your api keys.
 
 lazy.nvim
 ```lua
@@ -28,8 +28,25 @@ Configure the plugin. This can be omitted to use the default configuration.
 require('llm').setup({
     -- How long to wait for the request to start returning data.
     timeout_ms = 10000,
-    -- Extra OpenAI-compatible services to add
     services = {
+        -- Supported services configured by default
+        -- groq = {
+        --     url = "https://api.groq.com/openai/v1/chat/completions",
+        --     model = "llama3-70b-8192",
+        --     api_key_name = "GROQ_API_KEY",
+        -- },
+        -- openai = {
+        --     url = "https://api.openai.com/v1/chat/completions",
+        --     model = "gpt-4o",
+        --     api_key_name = "OPENAI_API_KEY",
+        -- },
+        -- anthropic = {
+        --     url = "https://api.anthropic.com/v1/messages",
+        --     model = "claude-3-5-sonnet-20240620",
+        --     api_key_name = "ANTHROPIC_API_KEY",
+        -- },
+
+        -- Extra OpenAI-compatible services to add (optional)
         other_provider = {
             url = "https://example.com/other-provider/v1/chat/completions",
             model = "llama3",

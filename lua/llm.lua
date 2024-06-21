@@ -7,13 +7,18 @@ local service_lookup = {
 	groq = {
 		url = "https://api.groq.com/openai/v1/chat/completions",
 		model = "llama3-70b-8192",
-		api_key_name = "GROQ_API_KEY"
+		api_key_name = "GROQ_API_KEY",
 	},
 	openai = {
 		url = "https://api.openai.com/v1/chat/completions",
 		model = "gpt-4o",
-		api_key_name = "OPENAI_API_KEY"
-	}
+		api_key_name = "OPENAI_API_KEY",
+	},
+	anthropic = {
+		url = "https://api.anthropic.com/v1/messages",
+		model = "claude-3-5-sonnet-20240620",
+		api_key_name = "ANTHROPIC_API_KEY",
+	},
 }
 
 local function get_api_key(name)
@@ -53,7 +58,34 @@ local function write_string_at_cursor(str)
 	vim.api.nvim_win_set_cursor(current_window, { row + num_lines - 1, col + last_line_length })
 end
 
-local function process_sse_response(response)
+local function process_data_lines(lines, process_data)
+	for _, line in ipairs(lines) do
+		local data_start = line:find("data: ")
+		if data_start then
+			local json_str = line:sub(data_start + 6)
+			local stop
+			if line == "data: [DONE]" then
+				return true
+			end
+			local data = vim.json.decode(json_str)
+			if "anthropic" then
+				stop = data.type == "message_stop"
+			end
+			if stop then
+				return true
+			else
+				nio.sleep(5)
+				vim.schedule(function()
+					vim.cmd("undojoin")
+					process_data(data)
+				end)
+			end
+		end
+	end
+	return false
+end
+
+local function process_sse_response(response, service)
 	local buffer = ""
 	local has_tokens = false
 	local start_time = vim.uv.hrtime()
@@ -65,7 +97,8 @@ local function process_sse_response(response)
 			print("llm.nvim has timed out!")
 		end
 	end)
-	while true do
+	local done = false
+	while not done do
 		local current_time = vim.uv.hrtime()
 		local elapsed = (current_time - start_time)
 		if elapsed >= timeout_ms * 1000000 and not has_tokens then
@@ -84,26 +117,22 @@ local function process_sse_response(response)
 
 		buffer = buffer:sub(#table.concat(lines, "\n") + 1)
 
-		for _, line in ipairs(lines) do
-			if line == "data: [DONE]" then
-				return
+		done = process_data_lines(lines, function(data)
+			local content
+			if service == "anthropic" then
+				if data.delta and data.delta.text then
+					content = data.delta.text
+				end
 			else
-				local data_start = line:find("data: ")
-				if data_start then
-					local json_str = line:sub(data_start + 6)
-					nio.sleep(5)
-					vim.schedule(function()
-						vim.cmd("undojoin")
-						local data = vim.fn.json_decode(json_str)
-						local content = data.choices[1].delta.content
-						if data.choices and content and content ~= vim.NIL then
-							has_tokens = true
-							write_string_at_cursor(content)
-						end
-					end)
+				if data.choices and data.choices[1] and data.choices[1].delta then
+					content = data.choices[1].delta.content
 				end
 			end
-		end
+			if content and content ~= vim.NIL then
+				has_tokens = true
+				write_string_at_cursor(content)
+			end
+		end)
 	end
 end
 
@@ -155,21 +184,36 @@ Key capabilities:
 
 	local api_key = api_key_name and get_api_key(api_key_name)
 
-	local data = {
-		messages = {
-			{
-				role = "system",
-				content = system_prompt,
+	local data
+	if service == "anthropic" then
+		data = {
+			messages = {
+				{
+					role = "user",
+					content = system_prompt .. "\n" .. prompt,
+				},
 			},
-			{
-				role = "user",
-				content = prompt,
+			model = model,
+			stream = true,
+			max_tokens = 1024,
+		}
+	else
+		data = {
+			messages = {
+				{
+					role = "system",
+					content = system_prompt,
+				},
+				{
+					role = "user",
+					content = prompt,
+				},
 			},
-		},
-		model = model,
-		temperature = 0.7,
-		stream = true,
-	}
+			model = model,
+			temperature = 0.7,
+			stream = true,
+		}
+	end
 
 	local args = {
 		"-N",
@@ -178,12 +222,19 @@ Key capabilities:
 		"-H",
 		"Content-Type: application/json",
 		"-d",
-		vim.fn.json_encode(data),
+		vim.json.encode(data),
 	}
 
 	if api_key then
-	    table.insert(args, "-H")
-	    table.insert(args, "Authorization: Bearer " .. api_key)
+		if service == "anthropic" then
+			table.insert(args, "-H")
+			table.insert(args, "x-api-key: " .. api_key)
+			table.insert(args, "-H")
+			table.insert(args, "anthropic-version: 2023-06-01")
+		else
+			table.insert(args, "-H")
+			table.insert(args, "Authorization: Bearer " .. api_key)
+		end
 	end
 
 	table.insert(args, url)
@@ -194,7 +245,7 @@ Key capabilities:
 	})
 	nio.run(function()
 		nio.api.nvim_command("normal! o")
-		process_sse_response(response)
+		process_sse_response(response, service)
 	end)
 end
 
