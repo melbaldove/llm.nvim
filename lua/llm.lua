@@ -55,6 +55,15 @@ local function process_sse_response(response)
 		if chunk == nil then
 			break
 		end
+
+		-- two conditionals in case other errors are handled in future
+		if chunk:match('^{%s*"error"%s*:%s*{') then
+			if chunk:match('"code"%s*:%s*"invalid_api_key"') then
+				print("invalid api key")
+				return
+			end
+		end
+
 		buffer = buffer .. chunk
 
 		local lines = {}
