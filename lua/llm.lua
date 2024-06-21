@@ -1,12 +1,32 @@
 local nio = require("nio")
 local M = {}
 
-local groq_url = "https://api.groq.com/openai/v1/chat/completions"
-local openai_url = "https://api.openai.com/v1/chat/completions"
 local timeout_ms = 10000
+
+local service_lookup = {
+	groq = {
+		url = "https://api.groq.com/openai/v1/chat/completions",
+		model = "llama3-70b-8192",
+		api_key_name = "GROQ_API_KEY"
+	},
+	openai = {
+		url = "https://api.openai.com/v1/chat/completions",
+		model = "gpt-4o",
+		api_key_name = "OPENAI_API_KEY"
+	}
+}
 
 local function get_api_key(name)
 	return os.getenv(name)
+end
+
+function M.setup(opts)
+	timeout_ms = opts.timeout_ms or timeout_ms
+	if opts.services then
+		for key, service in pairs(opts.services) do
+			service_lookup[key] = service
+		end
+	end
 end
 
 function M.get_lines_until_cursor()
@@ -76,7 +96,7 @@ local function process_sse_response(response)
 						vim.cmd("undojoin")
 						local data = vim.fn.json_decode(json_str)
 						local content = data.choices[1].delta.content
-						if data.choices and content then
+						if data.choices and content and content ~= vim.NIL then
 							has_tokens = true
 							write_string_at_cursor(content)
 						end
@@ -122,17 +142,18 @@ Key capabilities:
 	local url = ""
 	local model = ""
 	local api_key_name = ""
-	if service == "groq" then
-		url = groq_url
-		api_key_name = "GROQ_API_KEY"
-		model = "llama3-70b-8192"
+
+	local found_service = service_lookup[service]
+	if found_service then
+		url = found_service.url
+		api_key_name = found_service.api_key_name
+		model = found_service.model
 	else
-		url = openai_url
-		api_key_name = "OPENAI_API_KEY"
-		model = "gpt-4o"
+		print("Invalid service: " .. service)
+		return
 	end
 
-	local api_key = get_api_key(api_key_name)
+	local api_key = api_key_name and get_api_key(api_key_name)
 
 	local data = {
 		messages = {
@@ -150,20 +171,26 @@ Key capabilities:
 		stream = true,
 	}
 
+	local args = {
+		"-N",
+		"-X",
+		"POST",
+		"-H",
+		"Content-Type: application/json",
+		"-d",
+		vim.fn.json_encode(data),
+	}
+
+	if api_key then
+	    table.insert(args, "-H")
+	    table.insert(args, "Authorization: Bearer " .. api_key)
+	end
+
+	table.insert(args, url)
+
 	local response = nio.process.run({
 		cmd = "curl",
-		args = {
-			"-N",
-			"-X",
-			"POST",
-			"-H",
-			"Content-Type: application/json",
-			"-H",
-			"Authorization: Bearer " .. api_key,
-			"-d",
-			vim.fn.json_encode(data),
-			url,
-		},
+		args = args,
 	})
 	nio.run(function()
 		nio.api.nvim_command("normal! o")

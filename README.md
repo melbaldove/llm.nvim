@@ -20,6 +20,25 @@ lazy.nvim
 
 ### Usage
 
+**`setup()`**
+
+Configure the plugin. This can be omitted to use the default configuration.
+
+```lua
+require('llm').setup({
+    -- How long to wait for the request to start returning data.
+    timeout_ms = 10000,
+    -- Extra OpenAI-compatible services to add
+    services = {
+        other_provider = {
+            url = "https://example.com/other-provider/v1/chat/completions",
+            model = "llama3",
+            api_key_name = "OTHER_PROVIDER_API_KEY",
+        }
+    }
+})
+```
+
 **`prompt()`**
 
 Triggers the LLM assistant. You can pass an optional `replace` flag to replace the current selection with the LLM's response. The prompt is either the visually selected text or the file content up to the cursor if no selection is made.
