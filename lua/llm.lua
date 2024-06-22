@@ -72,6 +72,17 @@ local function process_data_lines(lines, service, process_data)
 				stop = data.type == "message_stop"
 			end
 			if stop then
+			local stop
+			if line == "data: [DONE]" then
+	print( 'process : true' )
+				return true
+			end
+			local data = vim.json.decode(json_str)
+			if "anthropic" then
+				stop = data.type == "message_stop"
+			end
+			if stop then
+	print( 'process : true' )
 				return true
 			else
 				nio.sleep(5)
@@ -104,7 +115,9 @@ local function process_sse_response(response, service)
 		if elapsed >= timeout_ms * 1000000 and not has_tokens then
 			return
 		end
+
 		local chunk = response.stdout.read(1024)
+		local err = response.stderr.read(1024)
 		if chunk == nil then
 			break
 		end
@@ -248,6 +261,23 @@ Key capabilities:
 		nio.api.nvim_command("normal! o")
 		process_sse_response(response, service)
 	end)
+end
+
+function M.testing()
+local Job = require('plenary.job')
+
+Job:new({
+  command = 'curl',
+  args = { '-k', '-X', 'GET', 'https://localhost:59784/swagger/v1/swagger.json' },
+  on_exit = function(j, return_val)
+    print('Job finished with return value:', return_val)
+    local output = table.concat(j:result(), '\n')
+    local errors = table.concat(j:stderr_result(), '\n')
+
+    print('Output:', output)
+    print('Errors:', errors)
+  end,
+}):sync()  -- Use :start() for asynchronous behavior
 end
 
 function M.get_visual_selection()
