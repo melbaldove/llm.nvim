@@ -187,10 +187,11 @@ Key capabilities:
 	local data
 	if service == "anthropic" then
 		data = {
+			system = system_prompt,
 			messages = {
 				{
 					role = "user",
-					content = system_prompt .. "\n" .. prompt,
+					content = prompt,
 				},
 			},
 			model = model,
