@@ -58,17 +58,17 @@ local function write_string_at_cursor(str)
 	vim.api.nvim_win_set_cursor(current_window, { row + num_lines - 1, col + last_line_length })
 end
 
-local function process_data_lines(lines, process_data)
+local function process_data_lines(lines, service, process_data)
 	for _, line in ipairs(lines) do
 		local data_start = line:find("data: ")
 		if data_start then
 			local json_str = line:sub(data_start + 6)
-			local stop
+			local stop = false
 			if line == "data: [DONE]" then
 				return true
 			end
 			local data = vim.json.decode(json_str)
-			if "anthropic" then
+			if service == "anthropic" then
 				stop = data.type == "message_stop"
 			end
 			if stop then
@@ -117,7 +117,7 @@ local function process_sse_response(response, service)
 
 		buffer = buffer:sub(#table.concat(lines, "\n") + 1)
 
-		done = process_data_lines(lines, function(data)
+		done = process_data_lines(lines, service, function(data)
 			local content
 			if service == "anthropic" then
 				if data.delta and data.delta.text then
