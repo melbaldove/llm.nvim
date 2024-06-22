@@ -1,4 +1,4 @@
-local nio = require("nio")
+local Job = require 'plenary.job'
 local M = {}
 
 local timeout_ms = 10000
@@ -58,7 +58,21 @@ local function write_string_at_cursor(str)
 	vim.api.nvim_win_set_cursor(current_window, { row + num_lines - 1, col + last_line_length })
 end
 
-local function process_data_lines(lines, service, process_data)
+local function process_data_lines(buffer, process_data)
+	local has_line_terminators = buffer:find("\r") or buffer:find("\n")
+
+	local lines = {}
+	for line in buffer:gmatch("(.-)\r?\n") do
+		table.insert(lines, line)
+	end
+
+	if #lines == 0 then
+		for line in buffer:gmatch("[^\n]+") do
+			table.insert(lines, line)
+		end
+	end
+
+	buffer = buffer:sub(#table.concat(lines, "\n") + 1)
 	for _, line in ipairs(lines) do
 		local data_start = line:find("data: ")
 		if data_start then
@@ -71,88 +85,30 @@ local function process_data_lines(lines, service, process_data)
 			if service == "anthropic" then
 				stop = data.type == "message_stop"
 			end
-			if stop then
-			local stop
-			if line == "data: [DONE]" then
-	print( 'process : true' )
-				return true
-			end
-			local data = vim.json.decode(json_str)
-			if "anthropic" then
-				stop = data.type == "message_stop"
-			end
-			if stop then
-	print( 'process : true' )
-				return true
-			else
-				nio.sleep(5)
-				vim.schedule(function()
-					vim.cmd("undojoin")
-					process_data(data)
-				end)
-			end
-		end
-	end
-	return false
-end
-
-local function process_sse_response(response, service)
-	local buffer = ""
-	local has_tokens = false
-	local start_time = vim.uv.hrtime()
-
-	nio.run(function()
-		nio.sleep(timeout_ms)
-		if not has_tokens then
-			response.stdout.close()
-			print("llm.nvim has timed out!")
-		end
-	end)
-	local done = false
-	while not done do
-		local current_time = vim.uv.hrtime()
-		local elapsed = (current_time - start_time)
-		if elapsed >= timeout_ms * 1000000 and not has_tokens then
-			return
-		end
-
-		local chunk = response.stdout.read(1024)
-		local err = response.stderr.read(1024)
-		if chunk == nil then
-			break
-		end
-		buffer = buffer .. chunk
-
-		local lines = {}
-		for line in buffer:gmatch("(.-)\r?\n") do
-			table.insert(lines, line)
-		end
-
-		buffer = buffer:sub(#table.concat(lines, "\n") + 1)
-
-		done = process_data_lines(lines, service, function(data)
-			local content
-			if service == "anthropic" then
-				if data.delta and data.delta.text then
-					content = data.delta.text
+				local stop
+				if line == "data: [DONE]" then
+					return true
 				end
-			else
-				if data.choices and data.choices[1] and data.choices[1].delta then
-					content = data.choices[1].delta.content
+				local data = vim.json.decode(json_str)
+				if "anthropic" then
+					stop = data.type == "message_stop"
 				end
-			end
-			if content and content ~= vim.NIL then
-				has_tokens = true
-				write_string_at_cursor(content)
-			end
-		end)
+				if stop then
+					return true
+				else
+					vim.defer_fn(function()
+						process_data(data)
+						vim.cmd("undojoin")
+					end, 5)
+				end
+		end
 	end
 end
 
-function M.prompt(opts)
+
+local function prepare_request(opts)
 	local replace = opts.replace
 	local service = opts.service
-	local prompt = ""
 	local visual_lines = M.get_visual_selection()
 	local system_prompt = [[
 You are an AI programming assistant integrated into a code editor. Your purpose is to help the user with programming tasks as they write code.
@@ -167,11 +123,12 @@ Key capabilities:
 - When asked to create code, only generate the code. No bugs.
 - Think step by step
     ]]
+
 	if visual_lines then
 		prompt = table.concat(visual_lines, "\n")
 		if replace then
 			system_prompt =
-				"Follow the instructions in the code comments. Generate code only. Think step by step. If you must speak, do so in comments. Generate valid code only."
+			"Follow the instructions in the code comments. Generate code only. Think step by step. If you must speak, do so in comments. Generate valid code only."
 			vim.api.nvim_command("normal! d")
 			vim.api.nvim_command("normal! k")
 		else
@@ -181,52 +138,36 @@ Key capabilities:
 		prompt = M.get_lines_until_cursor()
 	end
 
-	local url = ""
-	local model = ""
-	local api_key_name = ""
-
 	local found_service = service_lookup[service]
-	if found_service then
-		url = found_service.url
-		api_key_name = found_service.api_key_name
-		model = found_service.model
-	else
+	if not found_service then
 		print("Invalid service: " .. service)
-		return
+		return nil
 	end
 
+	local url = found_service.url
+	local model = found_service.model
+	local api_key_name = found_service.api_key_name
 	local api_key = api_key_name and get_api_key(api_key_name)
 
-	local data
+	local data = {
+		messages = {
+			{
+				role = "system",
+				content = system_prompt,
+			},
+			{
+				role = "user",
+				content = prompt,
+			},
+		},
+		model = model,
+		stream = true,
+	}
+
 	if service == "anthropic" then
-		data = {
-			system = system_prompt,
-			messages = {
-				{
-					role = "user",
-					content = prompt,
-				},
-			},
-			model = model,
-			stream = true,
-			max_tokens = 1024,
-		}
+		data.max_tokens = 1024
 	else
-		data = {
-			messages = {
-				{
-					role = "system",
-					content = system_prompt,
-				},
-				{
-					role = "user",
-					content = prompt,
-				},
-			},
-			model = model,
-			temperature = 0.7,
-			stream = true,
-		}
+		data.temperature = 0.7
 	end
 
 	local args = {
@@ -236,48 +177,64 @@ Key capabilities:
 		"-H",
 		"Content-Type: application/json",
 		"-d",
-		vim.json.encode(data),
+		vim.json.encode(data)
 	}
 
 	if api_key then
+		local header_auth = service == "anthropic" and "x-api-key: " .. api_key or
+		"Authorization: Bearer " .. api_key
+		table.insert(args, "-H")
+		table.insert(args, header_auth)
 		if service == "anthropic" then
 			table.insert(args, "-H")
-			table.insert(args, "x-api-key: " .. api_key)
-			table.insert(args, "-H")
 			table.insert(args, "anthropic-version: 2023-06-01")
-		else
-			table.insert(args, "-H")
-			table.insert(args, "Authorization: Bearer " .. api_key)
 		end
 	end
 
 	table.insert(args, url)
-
-	local response = nio.process.run({
-		cmd = "curl",
-		args = args,
-	})
-	nio.run(function()
-		nio.api.nvim_command("normal! o")
-		process_sse_response(response, service)
-	end)
+	return args
 end
 
-function M.testing()
-local Job = require('plenary.job')
-
-Job:new({
-  command = 'curl',
-  args = { '-k', '-X', 'GET', 'https://localhost:59784/swagger/v1/swagger.json' },
-  on_exit = function(j, return_val)
-    print('Job finished with return value:', return_val)
-    local output = table.concat(j:result(), '\n')
-    local errors = table.concat(j:stderr_result(), '\n')
-
-    print('Output:', output)
-    print('Errors:', errors)
-  end,
-}):sync()  -- Use :start() for asynchronous behavior
+function M.prompt(opts)
+	local args = prepare_request(opts)
+	if not args then
+		print("Failed to prepare request.")
+		return
+	end
+	vim.api.nvim_command("normal! o")
+	vim.api.nvim_command('undojoin')
+	Job:new({
+		command = 'curl',
+		args = args,
+		on_stdout = function(err, buffer)
+			if err then
+				print("Error:", err)
+			else
+				process_data_lines(buffer, function(data)
+					local content
+					if service == "anthropic" then
+						if data.delta and data.delta.text then
+							content = data.delta.text
+						end
+					else
+						if data.choices and data.choices[1] and data.choices[1].delta then
+							content = data.choices[1].delta.content
+						end
+					end
+					if content and content ~= vim.NIL then
+						has_tokens = true
+						vim.api.nvim_command('undojoin')
+						write_string_at_cursor(content)
+					end
+				end)
+			end
+		end,
+		on_exit = function(j, return_val)
+			if return_val ~= 0 then
+				print("Curl command failed with code:", return_val)
+			end
+		end,
+	}):start()
 end
 
 function M.get_visual_selection()
@@ -314,7 +271,8 @@ function M.get_visual_selection()
 		for i = srow, erow do
 			table.insert(
 				lines,
-				vim.api.nvim_buf_get_text(0, i - 1, math.min(scol - 1, ecol), i - 1, math.max(scol - 1, ecol), {})[1]
+				vim.api.nvim_buf_get_text(0, i - 1, math.min(scol - 1, ecol), i - 1,
+					math.max(scol - 1, ecol), {})[1]
 			)
 		end
 		return lines
@@ -335,3 +293,4 @@ function M.create_llm_md()
 end
 
 return M
+
