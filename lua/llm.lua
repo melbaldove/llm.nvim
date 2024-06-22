@@ -1,5 +1,15 @@
-local Job = require 'plenary.job'
 local M = {}
+
+local vim = vim or {} -- Ensure the `vim` global is available
+local curl = require('plenary.curl')
+local telescope = require('telescope')
+local pickers = require('telescope.pickers')
+local finders = require('telescope.finders')
+local actions = require('telescope.actions')
+local previewers = require('telescope.previewers')
+local action_state = require('telescope.actions.state')
+local conf = require('telescope.config').values
+local Job = require 'plenary.job'
 
 local timeout_ms = 10000
 
@@ -32,6 +42,85 @@ function M.setup(opts)
 			service_lookup[key] = service
 		end
 	end
+end
+
+
+local curl = require('plenary.curl')
+local finders = require('telescope.finders')
+local pickers = require('telescope.pickers')
+local conf = require('telescope.config').values
+local actions = require('telescope.actions')
+local action_state = require('telescope.actions.state')
+
+
+function M.async_fetch_models(callback)
+  curl.get('https://openrouter.ai/api/v1/models', {
+    callback = vim.schedule_wrap(function(response)
+      if response.status ~= 200 then
+        print('Failed to fetch models')
+        callback({})
+      else
+        -- Using pcall to safely decode JSON
+        local success, data = pcall(vim.json.decode, response.body)
+        if not success or type(data) ~= 'table' then
+          print('Invalid data received')
+          callback({})
+        else
+          callback(data.data)
+        end
+      end
+    end)
+  })
+end
+
+
+
+function M.pick_model()
+  M.async_fetch_models(function(models)
+    pickers.new({}, {
+      prompt_title = 'Select a Model',
+      finder = finders.new_table {
+        results = models,
+        entry_maker = function(entry)
+          return {
+            value = entry,
+            display = entry.name or entry.id,
+            ordinal = entry.name or entry.id,
+            metadata = entry
+          }
+        end,
+      },
+      sorter = conf.generic_sorter({}),
+      previewer = previewers.new_buffer_previewer({
+define_preview = function(self, entry, status)
+  local bufnr = self.state.bufnr
+  local model = entry.metadata
+
+  local function sanitize(str)
+    return str:gsub("\n", " ")
+  end
+
+  local function pretty_json(obj)
+    local json_str = vim.fn.json_encode(obj)
+    local pretty_str = vim.fn.system('python -m json.tool', json_str)
+    return pretty_str
+  end
+
+  local content = vim.split(pretty_json(model), '\n')
+
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, content)
+end
+      }),
+      attach_mappings = function(prompt_bufnr, map)
+        actions.select_default:replace(function()
+          local selection = action_state.get_selected_entry()
+          actions.close(prompt_bufnr)
+          M.model = selection.value.id 
+        end)
+        return true
+      end,
+    }):find()
+  end)
 end
 
 function M.get_lines_until_cursor()
@@ -145,7 +234,7 @@ Key capabilities:
 	end
 
 	local url = found_service.url
-	local model = found_service.model
+	local model = M.model
 	local api_key_name = found_service.api_key_name
 	local api_key = api_key_name and get_api_key(api_key_name)
 
