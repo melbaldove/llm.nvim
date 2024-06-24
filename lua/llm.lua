@@ -300,7 +300,7 @@ function M.create_llm_md()
 	if cur_buf_name ~= llm_md_path then
 		vim.api.nvim_command("edit " .. llm_md_path)
 		local buf = vim.api.nvim_get_current_buf()
-		vim.api.nvim_buf_set_option(buf, "bufoptions", { filetype = "markdown" })
+		vim.api.nvim_buf_set_option(buf, "filetype", "markdown")
 		vim.api.nvim_win_set_buf(0, buf)
 	end
 end
