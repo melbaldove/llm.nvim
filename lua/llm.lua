@@ -21,6 +21,22 @@ local service_lookup = {
 	},
 }
 
+local system_prompt = [[
+You are an AI programming assistant integrated into a code editor. Your purpose is to help the user with programming tasks as they write code.
+Key capabilities:
+- Thoroughly analyze the user's code and provide insightful suggestions for improvements related to best practices, performance, readability, and maintainability. Explain your reasoning.
+- Answer coding questions in detail, using examples from the user's own code when relevant. Break down complex topics step- Spot potential bugs and logical errors. Alert the user and suggest fixes.
+- Upon request, add helpful comments explaining complex or unclear code.
+- Suggest relevant documentation, StackOverflow answers, and other resources related to the user's code and questions.
+- Engage in back-and-forth conversations to understand the user's intent and provide the most helpful information.
+- Keep concise and use markdown.
+- When asked to create code, only generate the code. No bugs.
+- Think step by step
+]]
+
+local system_prompt_replace =
+	"Follow the instructions in the code comments. Generate code only. Think step by step. If you must speak, do so in comments. Generate valid code only."
+
 local function get_api_key(name)
 	return os.getenv(name)
 end
@@ -31,6 +47,12 @@ function M.setup(opts)
 		for key, service in pairs(opts.services) do
 			service_lookup[key] = service
 		end
+	end
+	if opts.system_prompt then
+		system_prompt = opts.system_prompt
+	end
+	if opts.system_prompt_replace then
+		system_prompt_replace = opts.system_prompt_replace
 	end
 end
 
@@ -141,24 +163,9 @@ function M.prompt(opts)
 	local service = opts.service
 	local prompt = ""
 	local visual_lines = M.get_visual_selection()
-	local system_prompt = [[
-You are an AI programming assistant integrated into a code editor. Your purpose is to help the user with programming tasks as they write code.
-Key capabilities:
-- Thoroughly analyze the user's code and provide insightful suggestions for improvements related to best practices, performance, readability, and maintainability. Explain your reasoning.
-- Answer coding questions in detail, using examples from the user's own code when relevant. Break down complex topics step-by-step.
-- Spot potential bugs and logical errors. Alert the user and suggest fixes.
-- Upon request, add helpful comments explaining complex or unclear code.
-- Suggest relevant documentation, StackOverflow answers, and other resources related to the user's code and questions.
-- Engage in back-and-forth conversations to understand the user's intent and provide the most helpful information.
-- Keep concise and use markdown.
-- When asked to create code, only generate the code. No bugs.
-- Think step by step
-    ]]
 	if visual_lines then
 		prompt = table.concat(visual_lines, "\n")
 		if replace then
-			system_prompt =
-				"Follow the instructions in the code comments. Generate code only. Think step by step. If you must speak, do so in comments. Generate valid code only."
 			vim.api.nvim_command("normal! d")
 			vim.api.nvim_command("normal! k")
 		else
@@ -187,7 +194,7 @@ Key capabilities:
 	local data
 	if service == "anthropic" then
 		data = {
-			system = system_prompt,
+			system = replace and system_prompt_replace or system_prompt,
 			messages = {
 				{
 					role = "user",
@@ -203,7 +210,7 @@ Key capabilities:
 			messages = {
 				{
 					role = "system",
-					content = system_prompt,
+					content = replace and system_prompt_replace or system_prompt,
 				},
 				{
 					role = "user",
