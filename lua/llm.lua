@@ -34,6 +34,9 @@ Key capabilities:
 - Think step by step
 ]]
 
+local system_prompt_replace =
+	"Follow the instructions in the code comments. Generate code only. Think step by step. If you must speak, do so in comments. Generate valid code only."
+
 local function get_api_key(name)
 	return os.getenv(name)
 end
@@ -47,6 +50,9 @@ function M.setup(opts)
 	end
 	if opts.system_prompt then
 		system_prompt = opts.system_prompt
+	end
+	if opts.system_prompt_replace then
+		system_prompt_replace = opts.system_prompt_replace
 	end
 end
 
@@ -188,7 +194,7 @@ function M.prompt(opts)
 	local data
 	if service == "anthropic" then
 		data = {
-			system = system_prompt,
+			system = replace and system_prompt_replace or system_prompt,
 			messages = {
 				{
 					role = "user",
@@ -204,7 +210,7 @@ function M.prompt(opts)
 			messages = {
 				{
 					role = "system",
-					content = system_prompt,
+					content = replace and system_prompt_replace or system_prompt,
 				},
 				{
 					role = "user",
