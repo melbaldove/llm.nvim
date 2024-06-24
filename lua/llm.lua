@@ -21,6 +21,19 @@ local service_lookup = {
 	},
 }
 
+local system_prompt = [[
+You are an AI programming assistant integrated into a code editor. Your purpose is to help the user with programming tasks as they write code.
+Key capabilities:
+- Thoroughly analyze the user's code and provide insightful suggestions for improvements related to best practices, performance, readability, and maintainability. Explain your reasoning.
+- Answer coding questions in detail, using examples from the user's own code when relevant. Break down complex topics step- Spot potential bugs and logical errors. Alert the user and suggest fixes.
+- Upon request, add helpful comments explaining complex or unclear code.
+- Suggest relevant documentation, StackOverflow answers, and other resources related to the user's code and questions.
+- Engage in back-and-forth conversations to understand the user's intent and provide the most helpful information.
+- Keep concise and use markdown.
+- When asked to create code, only generate the code. No bugs.
+- Think step by step
+]]
+
 local function get_api_key(name)
 	return os.getenv(name)
 end
@@ -31,6 +44,9 @@ function M.setup(opts)
 		for key, service in pairs(opts.services) do
 			service_lookup[key] = service
 		end
+	end
+	if opts.system_prompt then
+		system_prompt = opts.system_prompt
 	end
 end
 
@@ -141,24 +157,9 @@ function M.prompt(opts)
 	local service = opts.service
 	local prompt = ""
 	local visual_lines = M.get_visual_selection()
-	local system_prompt = [[
-You are an AI programming assistant integrated into a code editor. Your purpose is to help the user with programming tasks as they write code.
-Key capabilities:
-- Thoroughly analyze the user's code and provide insightful suggestions for improvements related to best practices, performance, readability, and maintainability. Explain your reasoning.
-- Answer coding questions in detail, using examples from the user's own code when relevant. Break down complex topics step-by-step.
-- Spot potential bugs and logical errors. Alert the user and suggest fixes.
-- Upon request, add helpful comments explaining complex or unclear code.
-- Suggest relevant documentation, StackOverflow answers, and other resources related to the user's code and questions.
-- Engage in back-and-forth conversations to understand the user's intent and provide the most helpful information.
-- Keep concise and use markdown.
-- When asked to create code, only generate the code. No bugs.
-- Think step by step
-    ]]
 	if visual_lines then
 		prompt = table.concat(visual_lines, "\n")
 		if replace then
-			system_prompt =
-				"Follow the instructions in the code comments. Generate code only. Think step by step. If you must speak, do so in comments. Generate valid code only."
 			vim.api.nvim_command("normal! d")
 			vim.api.nvim_command("normal! k")
 		else
@@ -299,7 +300,7 @@ function M.create_llm_md()
 	if cur_buf_name ~= llm_md_path then
 		vim.api.nvim_command("edit " .. llm_md_path)
 		local buf = vim.api.nvim_get_current_buf()
-		vim.api.nvim_buf_set_option(buf, "filetype", "markdown")
+		vim.api.nvim_buf_set_option(buf, "bufoptions", { filetype = "markdown" })
 		vim.api.nvim_win_set_buf(0, buf)
 	end
 end
