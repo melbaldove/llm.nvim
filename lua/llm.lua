@@ -262,7 +262,7 @@ function M.get_visual_selection()
 	local _, erow, ecol = unpack(vim.fn.getpos("."))
 
 	-- visual line mode
-	if vim.fn.mode() == "V" then
+	if vim.fn.mode() == "V" or vim.fn.mode() == "n" then
 		if srow > erow then
 			return vim.api.nvim_buf_get_lines(0, erow - 1, srow, true)
 		else
@@ -309,6 +309,19 @@ function M.create_llm_md()
 		vim.api.nvim_buf_set_option(buf, "filetype", "markdown")
 		vim.api.nvim_win_set_buf(0, buf)
 	end
+end
+
+-- For running prompt on a range of text via vim motions.
+function M.prompt_operatorfunc(opts)
+  local old_func = vim.go.operatorfunc -- backup previous reference
+  -- set a globally callable object/function
+  _G.op_func_llm_prompt = function()
+    require("llm").prompt(opts)
+    vim.go.operatorfunc = old_func -- restore previous opfunc
+    _G.op_func_llm_prompt = nil -- deletes itself from global namespace
+  end
+  vim.go.operatorfunc = 'v:lua.op_func_llm_prompt'
+  vim.api.nvim_feedkeys('g@', 'n', false)
 end
 
 return M

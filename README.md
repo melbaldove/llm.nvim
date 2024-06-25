@@ -77,6 +77,10 @@ vim.keymap.set("v", "<leader>.", function() require("llm").prompt({ replace = tr
 vim.keymap.set("n", "<leader>g,", function() require("llm").prompt({ replace = false, service = "openai" }) end)
 vim.keymap.set("v", "<leader>g,", function() require("llm").prompt({ replace = false, service = "openai" }) end)
 vim.keymap.set("v", "<leader>g.", function() require("llm").prompt({ replace = true, service = "openai" }) end)
+
+-- keybinds to support vim motions
+vim.keymap.set("n", "g,", function() require("llm").prompt_range_operator({ replace = false, service = "groq" }) end)
+vim.keymap.set("n", "g.", function() require("llm").prompt_range_operator({ replace = true, service = "groq" }) end)
 ```
 
 ### Roadmap
