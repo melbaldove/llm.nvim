@@ -38,6 +38,8 @@ Key capabilities:
 local system_prompt_replace =
 	"Follow the instructions in the code comments. Generate code only. Think step by step. If you must speak, do so in comments. Generate valid code only."
 
+local print_prompt = false
+
 local function get_api_key(name)
 	return os.getenv(name)
 end
@@ -55,13 +57,22 @@ function M.setup(opts)
 	if opts.system_prompt_replace then
 		system_prompt_replace = opts.system_prompt_replace
 	end
+
+	if opts.print_prompt then
+		print_prompt = opts.print_prompt
+	end
 end
 
-function M.get_lines_until_cursor()
+local function get_lines(opts)
 	local current_buffer = vim.api.nvim_get_current_buf()
 	local current_window = vim.api.nvim_get_current_win()
 	local cursor_position = vim.api.nvim_win_get_cursor(current_window)
-	local row = cursor_position[1]
+	local row
+	if opts.all then
+		row = -1
+	else
+		row = cursor_position[1]
+	end
 
 	local lines = vim.api.nvim_buf_get_lines(current_buffer, 0, row, true)
 
@@ -162,18 +173,25 @@ end
 function M.prompt(opts)
 	local replace = opts.replace
 	local service = opts.service
+	local all_text = get_lines({ all = true })
 	local prompt = ""
 	local visual_lines = M.get_selection()
 	if visual_lines then
 		prompt = table.concat(visual_lines, "\n")
 		if replace then
+			local selection = prompt
+			prompt = all_text .. "\n============ code to replace ============\n" .. selection
 			vim.api.nvim_command("normal! d")
 			vim.api.nvim_command("normal! k")
 		else
 			vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", false, true, true), "nx", false)
 		end
 	else
-		prompt = M.get_lines_until_cursor()
+		prompt = get_lines({ all = false })
+	end
+
+	if print_prompt then
+		print(prompt)
 	end
 
 	local url = ""
