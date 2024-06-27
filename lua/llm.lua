@@ -1,5 +1,6 @@
 local nio = require("nio")
 local M = {}
+local vim = vim or {}
 
 local timeout_ms = 10000
 
@@ -162,7 +163,7 @@ function M.prompt(opts)
 	local replace = opts.replace
 	local service = opts.service
 	local prompt = ""
-	local visual_lines = M.get_visual_selection()
+	local visual_lines = M.get_selection()
 	if visual_lines then
 		prompt = table.concat(visual_lines, "\n")
 		if replace then
@@ -257,12 +258,21 @@ function M.prompt(opts)
 	end)
 end
 
-function M.get_visual_selection()
-	local _, srow, scol = unpack(vim.fn.getpos("v"))
-	local _, erow, ecol = unpack(vim.fn.getpos("."))
+function M.get_selection()
+	local is_motion = _G.op_func_llm_prompt ~= nil
+	local start_mark, end_mark
+	if is_motion then
+		start_mark = "'["
+		end_mark = "']"
+	else
+		start_mark = "v"
+		end_mark = "."
+	end
+	local _, srow, scol = unpack(vim.fn.getpos(start_mark))
+	local _, erow, ecol = unpack(vim.fn.getpos(end_mark))
 
 	-- visual line mode
-	if vim.fn.mode() == "V" or vim.fn.mode() == "n" then
+	if vim.fn.mode() == "V" or is_motion then
 		if srow > erow then
 			return vim.api.nvim_buf_get_lines(0, erow - 1, srow, true)
 		else
@@ -313,15 +323,15 @@ end
 
 -- For running prompt on a range of text via vim motions.
 function M.prompt_operatorfunc(opts)
-  local old_func = vim.go.operatorfunc -- backup previous reference
-  -- set a globally callable object/function
-  _G.op_func_llm_prompt = function()
-    require("llm").prompt(opts)
-    vim.go.operatorfunc = old_func -- restore previous opfunc
-    _G.op_func_llm_prompt = nil -- deletes itself from global namespace
-  end
-  vim.go.operatorfunc = 'v:lua.op_func_llm_prompt'
-  vim.api.nvim_feedkeys('g@', 'n', false)
+	local old_func = vim.go.operatorfunc -- backup previous reference
+	-- set a globally callable object/function
+	_G.op_func_llm_prompt = function()
+		require("llm").prompt(opts)
+		vim.go.operatorfunc = old_func -- restore previous opfunc
+		_G.op_func_llm_prompt = nil -- deletes itself from global namespace
+	end
+	vim.go.operatorfunc = "v:lua.op_func_llm_prompt"
+	vim.api.nvim_feedkeys("g@", "n", false)
 end
 
 return M
