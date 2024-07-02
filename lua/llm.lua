@@ -1,8 +1,9 @@
-local nio = require("nio")
+local Job = require("plenary.job")
 local M = {}
 local vim = vim or {}
 
 local timeout_ms = 10000
+local active_job = nil
 
 local service_lookup = {
 	groq = {
@@ -92,82 +93,45 @@ local function write_string_at_cursor(str)
 	vim.api.nvim_win_set_cursor(current_window, { row + num_lines - 1, col + last_line_length })
 end
 
-local function process_data_lines(lines, service, process_data)
-	for _, line in ipairs(lines) do
-		local data_start = line:find("data: ")
-		if data_start then
-			local json_str = line:sub(data_start + 6)
-			local stop = false
-			if line == "data: [DONE]" then
-				return true
-			end
-			local data = vim.json.decode(json_str)
-			if service == "anthropic" then
-				stop = data.type == "message_stop"
-			end
-			if stop then
-				return true
-			else
-				nio.sleep(5)
-				vim.schedule(function()
-					vim.cmd("undojoin")
-					process_data(data)
-				end)
-			end
+local function process_data_lines(line, service, process_data)
+	local json = line:match("^data: (.+)$")
+	if json then
+		local stop = false
+		if json == "[DONE]" then
+			return true
+		end
+		local data = vim.json.decode(json)
+		if service == "anthropic" then
+			stop = data.type == "message_stop"
+		end
+		if stop then
+			return true
+		else
+			vim.schedule(function()
+				vim.cmd("undojoin")
+				process_data(data)
+			end)
 		end
 	end
 	return false
 end
 
-local function process_sse_response(response, service)
-	local buffer = ""
-	local has_tokens = false
-	local start_time = vim.uv.hrtime()
-
-	nio.run(function()
-		nio.sleep(timeout_ms)
-		if not has_tokens then
-			response.stdout.close()
-			print("llm.nvim has timed out!")
+local function process_sse_response(buffer, service)
+	process_data_lines(buffer, service, function(data)
+		local content
+		if service == "anthropic" then
+			if data.delta and data.delta.text then
+				content = data.delta.text
+			end
+		else
+			if data.choices and data.choices[1] and data.choices[1].delta then
+				content = data.choices[1].delta.content
+			end
+		end
+		if content and content ~= vim.NIL then
+			write_string_at_cursor(content)
 		end
 	end)
-	local done = false
-	while not done do
-		local current_time = vim.uv.hrtime()
-		local elapsed = (current_time - start_time)
-		if elapsed >= timeout_ms * 1000000 and not has_tokens then
-			return
-		end
-		local chunk = response.stdout.read(1024)
-		if chunk == nil then
-			break
-		end
-		buffer = buffer .. chunk
-
-		local lines = {}
-		for line in buffer:gmatch("(.-)\r?\n") do
-			table.insert(lines, line)
-		end
-
-		buffer = buffer:sub(#table.concat(lines, "\n") + 1)
-
-		done = process_data_lines(lines, service, function(data)
-			local content
-			if service == "anthropic" then
-				if data.delta and data.delta.text then
-					content = data.delta.text
-				end
-			else
-				if data.choices and data.choices[1] and data.choices[1].delta then
-					content = data.choices[1].delta.content
-				end
-			end
-			if content and content ~= vim.NIL then
-				has_tokens = true
-				write_string_at_cursor(content)
-			end
-		end)
-	end
 end
 
 function M.prompt(opts)
@@ -265,15 +229,25 @@ function M.prompt(opts)
 	end
 
 	table.insert(args, url)
+	if active_job then
+		active_job:shutdown()
+		active_job = nil
+	end
 
-	local response = nio.process.run({
-		cmd = "curl",
+	active_job = Job:new({
+		command = "curl",
 		args = args,
+		on_stdout = function(_, out)
+			process_sse_response(out, service)
+		end,
+		on_stderr = function(_, _) end,
+		on_exit = function()
+			active_job = nil
+		end,
 	})
-	nio.run(function()
-		nio.api.nvim_command("normal! o")
-		process_sse_response(response, service)
-	end)
+
+	active_job:start()
+	vim.api.nvim_command("normal! o")
 end
 
 function M.get_selection()
@@ -339,14 +313,12 @@ function M.create_llm_md()
 	end
 end
 
--- For running prompt on a range of text via vim motions.
 function M.prompt_operatorfunc(opts)
-	local old_func = vim.go.operatorfunc -- backup previous reference
-	-- set a globally callable object/function
+	local old_func = vim.go.operatorfunc
 	_G.op_func_llm_prompt = function()
 		require("llm").prompt(opts)
-		vim.go.operatorfunc = old_func -- restore previous opfunc
-		_G.op_func_llm_prompt = nil -- deletes itself from global namespace
+		vim.go.operatorfunc = old_func
+		_G.op_func_llm_prompt = nil
 	end
 	vim.go.operatorfunc = "v:lua.op_func_llm_prompt"
 	vim.api.nvim_feedkeys("g@", "n", false)
