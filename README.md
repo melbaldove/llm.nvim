@@ -63,24 +63,30 @@ Triggers the LLM assistant. You can pass an optional `replace` flag to replace t
 **`create_llm_md()`**
 
 Creates a new `llm.md` file in the current working directory, where you can write questions or prompts for the LLM.
+You can also use `:LLM` command to call this function.
+
+**`prompt_operatorfunc()`**
+
+Allows you to use text objects and motions for the LLM prompt.
+So you can use a command to go into operator-pending mode and then use motions like `w`, `b`, `e`, `i{`, `a{`, `i"`, `a"`, etc. to select text to prompt the LLM.
 
 **Example Bindings**
 ```lua
-vim.keymap.set("n", "<leader>m", function() require("llm").create_llm_md() end)
+vim.keymap.set("n", "<leader>m", function() require("llm").create_llm_md() end, { desc = "Create llm.md" })
 
 -- keybinds for prompting with groq
-vim.keymap.set("n", "<leader>,", function() require("llm").prompt({ replace = false, service = "groq" }) end)
-vim.keymap.set("v", "<leader>,", function() require("llm").prompt({ replace = false, service = "groq" }) end)
-vim.keymap.set("v", "<leader>.", function() require("llm").prompt({ replace = true, service = "groq" }) end)
+vim.keymap.set("n", "<leader>,", function() require("llm").prompt({ replace = false, service = "groq" }) end, { desc = "Prompt with groq" })
+vim.keymap.set("v", "<leader>,", function() require("llm").prompt({ replace = false, service = "groq" }) end, { desc = "Prompt with groq" })
+vim.keymap.set("v", "<leader>.", function() require("llm").prompt({ replace = true, service = "groq" }) end, { desc = "Prompt while replacing with groq" }))
 
 -- keybinds for prompting with openai
-vim.keymap.set("n", "<leader>g,", function() require("llm").prompt({ replace = false, service = "openai" }) end)
-vim.keymap.set("v", "<leader>g,", function() require("llm").prompt({ replace = false, service = "openai" }) end)
-vim.keymap.set("v", "<leader>g.", function() require("llm").prompt({ replace = true, service = "openai" }) end)
+vim.keymap.set("n", "<leader>g,", function() require("llm").prompt({ replace = false, service = "openai" }) end, { desc = "Prompt with openai" })
+vim.keymap.set("v", "<leader>g,", function() require("llm").prompt({ replace = false, service = "openai" }) end, { desc = "Prompt with openai" })
+vim.keymap.set("v", "<leader>g.", function() require("llm").prompt({ replace = true, service = "openai" }) end, { desc = "Prompt while replacing with openai" }))
 
 -- keybinds to support vim motions
-vim.keymap.set("n", "g,", function() require("llm").prompt_operatorfunc({ replace = false, service = "groq" }) end)
-vim.keymap.set("n", "g.", function() require("llm").prompt_operatorfunc({ replace = true, service = "groq" }) end)
+vim.keymap.set("n", "g,", function() require("llm").prompt_operatorfunc({ replace = false, service = "groq" }) end, { desc = "Prompt with groq" })
+vim.keymap.set("n", "g.", function() require("llm").prompt_operatorfunc({ replace = true, service = "groq" }) end, { desc = "Prompt while replacing with groq" }))
 ```
 
 ### Roadmap

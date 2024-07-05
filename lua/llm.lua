@@ -62,6 +62,7 @@ function M.setup(opts)
 	if opts.print_prompt then
 		print_prompt = opts.print_prompt
 	end
+	vim.api.nvim_create_user_command("LLM", M.create_llm_md, {})
 end
 
 local function get_lines(opts)
