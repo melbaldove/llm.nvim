@@ -89,6 +89,13 @@ vim.keymap.set("n", "g,", function() require("llm").prompt_operatorfunc({ replac
 vim.keymap.set("n", "g.", function() require("llm").prompt_operatorfunc({ replace = true, service = "groq" }) end, { desc = "Prompt while replacing with groq" }))
 ```
 
+#### File tagging  
+You can tag files to include in the context by prepending a path with `@`.  
+
+```
+@foo/bar.md
+@./foo/bar.md
+```
 ### Roadmap
 - [ollama](https://github.com/ollama/ollama) support
 

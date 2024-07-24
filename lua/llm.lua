@@ -65,6 +65,44 @@ function M.setup(opts)
 	vim.api.nvim_create_user_command("LLM", M.create_llm_md, {})
 end
 
+local function get_buffer_path()
+	local buffer = vim.api.nvim_get_current_buf()
+	local buffer_name = vim.api.nvim_buf_get_name(buffer)
+	local cwd = vim.fn.getcwd()
+	return vim.fn.fnamemodify(buffer_name, ":." .. cwd .. ":")
+end
+
+local function get_file_contents(file_path)
+	local cwd = vim.fn.getcwd()
+	local contents = ""
+
+	if file_path then
+		local full_path
+		if file_path:sub(1, 1) == "/" then
+			full_path = file_path
+		elseif file_path:sub(1, 2) == "~/" then
+			full_path = os.getenv("HOME") .. file_path:sub(2)
+		elseif file_path:sub(1, 2) == "./" then
+			full_path = cwd .. file_path:sub(2)
+		else
+			full_path = cwd .. "/" .. file_path
+		end
+		local file = io.open(full_path, "r")
+		if file then
+			local content = file:read("*all")
+			file:close()
+
+			relative_path = vim.fn.fnamemodify(full_path, ":." .. cwd .. ":")
+			contents = contents .. string.rep("=", 15) .. " " .. relative_path .. " " .. string.rep("=", 15) .. "\n"
+			contents = contents .. content .. "\n\n"
+		else
+			print("Cannot open file: " .. full_path)
+		end
+	end
+
+	return contents
+end
+
 local function get_lines(opts)
 	local current_buffer = vim.api.nvim_get_current_buf()
 	local current_window = vim.api.nvim_get_current_win()
@@ -76,9 +114,26 @@ local function get_lines(opts)
 		row = cursor_position[1]
 	end
 
-	local lines = vim.api.nvim_buf_get_lines(current_buffer, 0, row, true)
+	local all_lines = vim.api.nvim_buf_get_lines(current_buffer, 0, row, true)
+	local lines = {}
+	local file_contents = ""
 
-	return table.concat(lines, "\n")
+	for _, line in ipairs(all_lines) do
+		local file_path = line:match("^@(.+)$")
+		if file_path then
+			file_contents = file_contents .. get_file_contents(file_path)
+		else
+			table.insert(lines, line)
+		end
+	end
+
+	local relative_path = get_buffer_path()
+
+	local header = string.rep("=", 15) .. " " .. relative_path .. " " .. string.rep("=", 15)
+
+	table.insert(lines, 1, header)
+
+	return file_contents .. table.concat(lines, "\n")
 end
 
 local function write_string_at_cursor(str)
@@ -145,18 +200,26 @@ function M.prompt(opts)
 		prompt = table.concat(visual_lines, "\n")
 		if replace then
 			local selection = prompt
-			prompt = all_text .. "\n============ code to replace ============\n" .. selection
+			prompt = all_text
+				.. "\n============ code to replace from "
+				.. get_buffer_path()
+				.. " ============\n"
+				.. selection
 			vim.api.nvim_command("normal! d")
 			vim.api.nvim_command("normal! k")
 		else
+			local selection = prompt
+			prompt = all_text
+				.. "\n============ answer comments in this snippet from "
+				.. get_buffer_path()
+				.. " ============\n"
+				.. selection
+				.. "\n=======================\n"
+				.. "talk in comments only. do NOT use markdown. remember TALK IN COMMENTS ONLY"
 			vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", false, true, true), "nx", false)
 		end
 	else
 		prompt = get_lines({ all = false })
-	end
-
-	if print_prompt then
-		print(prompt)
 	end
 
 	local url = ""
@@ -176,9 +239,15 @@ function M.prompt(opts)
 	local api_key = api_key_name and get_api_key(api_key_name)
 
 	local data
+	local sys_prompt = replace and system_prompt_replace or system_prompt
+	if print_prompt then
+		print(sys_prompt)
+		print(prompt)
+	end
+
 	if service == "anthropic" then
 		data = {
-			system = replace and system_prompt_replace or system_prompt,
+			system = sys_prompt,
 			messages = {
 				{
 					role = "user",
@@ -194,7 +263,7 @@ function M.prompt(opts)
 			messages = {
 				{
 					role = "system",
-					content = replace and system_prompt_replace or system_prompt,
+					content = sys_prompt,
 				},
 				{
 					role = "user",
